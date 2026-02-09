@@ -1,0 +1,54 @@
+:root {
+	/* Colors - Dark theme (default) */
+	--bg-primary: #0a0a0a;
+	--bg-secondary: #1a1a1a;
+	--bg-tertiary: #2a2a2a;
+	--bg-overlay: rgba(0, 0, 0, 0.7);
+	--bg-glass: rgba(20, 20, 20, 0.85);
+
+	--text-primary: #e0e0e0;
+	--text-secondary: #999;
+	--text-muted: #666;
+
+	--accent: #4a9eff;
+	--accent-hover: #3a8eef;
+	--success: #4caf50;
+	--warning: #ff9800;
+	--danger: #f44336;
+
+	--border-color: #333;
+	--border-radius: 8px;
+	--border-radius-sm: 4px;
+
+	/* LED indicators */
+	--led-green: #4caf50;
+	--led-yellow: #ff9800;
+	--led-red: #f44336;
+	--led-gray: #555;
+
+	/* Sizing */
+	--top-bar-height: 40px;
+	--keyboard-height: 42%;
+	--drawer-width: 360px;
+	--touch-target: 44px;
+
+	/* Transitions */
+	--transition-fast: 150ms ease;
+	--transition-normal: 250ms ease;
+	--transition-slide: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="light"] {
+	--bg-primary: #f5f5f5;
+	--bg-secondary: #fff;
+	--bg-tertiary: #e8e8e8;
+	--bg-overlay: rgba(255, 255, 255, 0.7);
+	--bg-glass: rgba(245, 245, 245, 0.9);
+
+	--text-primary: #1a1a1a;
+	--text-secondary: #555;
+	--text-muted: #999;
+
+	--border-color: #ddd;
+	--led-gray: #ccc;
+}
