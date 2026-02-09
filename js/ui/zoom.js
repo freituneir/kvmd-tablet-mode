@@ -7,13 +7,16 @@
 //   - 1:1 pixel mode: native resolution, pannable if larger than viewport
 //
 // Zoom can be toggled via the magnifying glass button OR pinch-to-zoom.
+// Two-finger gesture disambiguation (pinch vs scroll/pan):
+//   - Distance between fingers changes >15px → pinch (zoom)
+//   - Midpoint moves >10px → scroll or pan depending on zoom state
 // When zoomed in:
-//   - Three-finger drag = pan around the zoomed view
-//   - Two-finger pinch = adjust zoom level (disambiguated from scroll via distance change)
-//   - Two-finger parallel drag = scroll (handled by mouse.js, NOT intercepted here)
+//   - Two-finger pinch = adjust zoom level
+//   - Two-finger parallel drag = pan viewport
 // When not zoomed:
-//   - Two-finger pinch = zoom in (same disambiguation applies)
-//   - Two-finger parallel drag = scroll (mouse.js handles it)
+//   - Two-finger pinch = zoom in
+//   - Two-finger parallel drag = scroll (falls through to mouse.js)
+// Three-finger touches are ignored.
 
 const PINCH_THRESHOLD = 15; // px of distance change to classify as pinch vs scroll
 
@@ -27,16 +30,20 @@ export class ZoomController {
 		this._translateY = 0;
 		this._onZoomChange = null;
 
-		// Three-finger pan tracking
-		this._panStartX = 0;
-		this._panStartY = 0;
+		// Two-finger pan tracking (when zoomed)
+		this._isPanning = false;
+		this._panStartMidX = 0;
+		this._panStartMidY = 0;
 		this._panStartTX = 0;
 		this._panStartTY = 0;
-		this._isPanning = false;
 
 		// Two-finger pinch tracking (active in all modes)
 		this._pinchStartDist = 0;
 		this._pinchStartScale = 1;
+		this._pinchStartTX = 0;
+		this._pinchStartTY = 0;
+		this._pinchFocalX = 0;
+		this._pinchFocalY = 0;
 		this._isPinching = false;
 		this._gestureUndecided = false;
 		this._isScroll = false;
@@ -101,28 +108,21 @@ export class ZoomController {
 	}
 
 	_handleTouchStart(ev) {
-		// Three-finger pan (only when zoomed)
-		if (ev.touches.length === 3 && this._zoomed) {
-			let mid = _midpoint3(ev.touches[0], ev.touches[1], ev.touches[2]);
-			this._panStartX = mid.x;
-			this._panStartY = mid.y;
-			this._panStartTX = this._translateX;
-			this._panStartTY = this._translateY;
-			this._isPanning = true;
-			ev.preventDefault();
-			ev.stopPropagation();
-			return;
-		}
+		// Ignore three-or-more-finger touches
+		if (ev.touches.length >= 3) return;
 
-		// Two-finger gesture disambiguation (pinch vs scroll)
+		// Two-finger gesture disambiguation (pinch vs scroll/pan)
 		if (ev.touches.length === 2) {
 			let t0 = ev.touches[0];
 			let t1 = ev.touches[1];
 			this._pinchStartDist = _dist(t0, t1);
 			this._pinchStartScale = this._scale;
+			this._pinchStartTX = this._translateX;
+			this._pinchStartTY = this._translateY;
 			this._gestureUndecided = true;
 			this._isScroll = false;
 			this._isPinching = false;
+			this._isPanning = false;
 			let mid = _midpoint(t0, t1);
 			this._undecidedMidX = mid.x;
 			this._undecidedMidY = mid.y;
@@ -134,21 +134,12 @@ export class ZoomController {
 	}
 
 	_handleTouchMove(ev) {
-		// Three-finger pan
-		if (ev.touches.length === 3 && this._isPanning) {
-			ev.preventDefault();
-			ev.stopPropagation();
-			let mid = _midpoint3(ev.touches[0], ev.touches[1], ev.touches[2]);
-			this._translateX = this._panStartTX + (mid.x - this._panStartX);
-			this._translateY = this._panStartTY + (mid.y - this._panStartY);
-			this._clampTranslation();
-			this._applyTransform();
-			return;
-		}
+		// Ignore three-or-more-finger touches
+		if (ev.touches.length >= 3) return;
 
-		// Two-finger gesture (pinch vs scroll disambiguation)
+		// Two-finger gesture (pinch vs scroll/pan disambiguation)
 		if (ev.touches.length !== 2) return;
-		if (!this._gestureUndecided && !this._isPinching && !this._isScroll) return;
+		if (!this._gestureUndecided && !this._isPinching && !this._isScroll && !this._isPanning) return;
 
 		let t0 = ev.touches[0];
 		let t1 = ev.touches[1];
@@ -162,16 +153,32 @@ export class ZoomController {
 				this._gestureUndecided = false;
 				this._isPinching = true;
 				this._isScroll = false;
+				// Compute focal point (pinch midpoint) in content space
+				// so we can keep it stationary as zoom changes
+				let focalMid = _midpoint(t0, t1);
+				let focalRect = this._container.getBoundingClientRect();
+				this._pinchFocalX = (focalMid.x - focalRect.left) / this._pinchStartScale;
+				this._pinchFocalY = (focalMid.y - focalRect.top) / this._pinchStartScale;
 			} else {
-				// Check if midpoint moved (parallel movement = scroll)
+				// Check if midpoint moved (parallel movement = scroll or pan)
 				let mid = _midpoint(t0, t1);
 				let midDx = Math.abs(mid.x - this._undecidedMidX);
 				let midDy = Math.abs(mid.y - this._undecidedMidY);
 				if (midDx > 10 || midDy > 10) {
-					// Fingers moving together → scroll
 					this._gestureUndecided = false;
-					this._isScroll = true;
 					this._isPinching = false;
+					if (this._zoomed) {
+						// Zoomed: parallel movement = pan viewport
+						this._isPanning = true;
+						this._isScroll = false;
+						this._panStartMidX = mid.x;
+						this._panStartMidY = mid.y;
+						this._panStartTX = this._translateX;
+						this._panStartTY = this._translateY;
+					} else {
+						// Not zoomed: parallel movement = scroll (mouse.js handles)
+						this._isScroll = true;
+					}
 				}
 			}
 
@@ -186,7 +193,20 @@ export class ZoomController {
 			return;
 		}
 
-		// Decided as pinch — adjust zoom
+		// Decided as pan — move the zoomed viewport
+		if (this._isPanning) {
+			ev.preventDefault();
+			ev.stopPropagation();
+
+			let mid = _midpoint(t0, t1);
+			this._translateX = this._panStartTX + (mid.x - this._panStartMidX);
+			this._translateY = this._panStartTY + (mid.y - this._panStartMidY);
+			this._clampTranslation();
+			this._applyTransform();
+			return;
+		}
+
+		// Decided as pinch — adjust zoom around the focal point
 		if (this._isPinching) {
 			ev.preventDefault();
 			ev.stopPropagation();
@@ -196,29 +216,31 @@ export class ZoomController {
 
 			// Clamp: minimum 1 (fit-to-screen), maximum 4x
 			newScale = Math.max(1, Math.min(newScale, 4));
+
+			// Adjust translation to keep the pinch focal point stationary.
+			// The focal point is in content-space coords; we shift the
+			// viewport so it stays at the same screen position after scaling.
+			let cx = this._container.offsetWidth / 2;
+			let cy = this._container.offsetHeight / 2;
+			this._translateX = this._pinchStartTX + (this._pinchFocalX - cx) * (this._pinchStartScale - newScale);
+			this._translateY = this._pinchStartTY + (this._pinchFocalY - cy) * (this._pinchStartScale - newScale);
+
 			this._scale = newScale;
 			this._zoomed = newScale > 1.05;
 
+			this._clampTranslation();
 			this._applyTransform();
 		}
 	}
 
 	_handleTouchEnd(ev) {
-		// Three-finger pan ended
-		if (this._isPanning && ev.touches.length < 3) {
-			this._isPanning = false;
-			this._clampTranslation();
-			this._applyTransform();
-			ev.preventDefault();
-			ev.stopPropagation();
-			return;
-		}
-
 		// Two-finger gesture ended
 		if (ev.touches.length < 2) {
 			let wasPinching = this._isPinching;
+			let wasPanning = this._isPanning;
 
 			this._isPinching = false;
+			this._isPanning = false;
 			this._gestureUndecided = false;
 			this._isScroll = false;
 
@@ -231,6 +253,13 @@ export class ZoomController {
 					this._applyTransform();
 				}
 				this._notifyChange();
+				ev.preventDefault();
+				ev.stopPropagation();
+			}
+
+			if (wasPanning) {
+				this._clampTranslation();
+				this._applyTransform();
 				ev.preventDefault();
 				ev.stopPropagation();
 			}
@@ -280,12 +309,5 @@ function _midpoint(t0, t1) {
 	return {
 		x: (t0.clientX + t1.clientX) / 2,
 		y: (t0.clientY + t1.clientY) / 2,
-	};
-}
-
-function _midpoint3(t0, t1, t2) {
-	return {
-		x: (t0.clientX + t1.clientX + t2.clientX) / 3,
-		y: (t0.clientY + t1.clientY + t2.clientY) / 3,
 	};
 }

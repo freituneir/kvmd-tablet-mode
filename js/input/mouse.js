@@ -86,6 +86,7 @@ export class MouseHandler {
 	set enabled(v) { this._enabled = v; }
 	set sensitivity(v) { this._sensitivity = parseFloat(v) || 1; }
 	set scrollSensitivity(v) { this._scrollSensitivity = parseFloat(v) || 2; }
+	get scrollSensitivity() { return this._scrollSensitivity; }
 
 	destroy() {
 		this._streamContainer.removeEventListener("touchstart", this._onTouchStart);

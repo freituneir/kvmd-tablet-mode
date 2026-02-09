@@ -2,7 +2,7 @@
 
 // Main app initialization — wires together all modules.
 
-import {apiLogin, apiAuthCheck} from "./api.js";
+import {apiLogin, apiAuthCheck, apiPost} from "./api.js";
 import {KvmdWebSocket} from "./websocket.js";
 import {StreamManager} from "./stream.js";
 import {MouseHandler} from "./input/mouse.js";
@@ -12,6 +12,7 @@ import {DrawerUI} from "./ui/drawer.js";
 import {KeyboardUI} from "./ui/keyboard-ui.js";
 import {MousePanelUI} from "./ui/mouse-panel.js";
 import {ZoomController} from "./ui/zoom.js";
+import {ScrollWidget} from "./ui/scroll-widget.js";
 import {AtxPanel} from "./panels/atx.js";
 import {MsdPanel} from "./panels/msd.js";
 import {GpioPanel} from "./panels/gpio.js";
@@ -32,6 +33,7 @@ class App {
 		this._msdPanel = null;
 		this._gpioPanel = null;
 		this._infoPanel = null;
+		this._scrollWidget = null;
 	}
 
 	async init() {
@@ -60,6 +62,20 @@ class App {
 		} else {
 			document.documentElement.setAttribute("data-theme", theme);
 		}
+	}
+
+	_updateJigglerUI(state) {
+		let toggle = document.getElementById("setting-jiggler-toggle");
+		let row = document.getElementById("setting-jiggler-row");
+		if (state.enabled) {
+			toggle.disabled = false;
+			row.style.display = "";
+		} else {
+			toggle.disabled = true;
+			row.style.display = "none";
+		}
+		toggle.classList.toggle("on", state.active);
+		toggle.setAttribute("aria-checked", state.active ? "true" : "false");
 	}
 
 	_showLogin() {
@@ -124,6 +140,12 @@ class App {
 		this._zoom.onZoomChange = (zoomed, scale) => {
 			this._topBar.setZoomState(zoomed);
 		};
+
+		// Scroll widget
+		this._scrollWidget = new ScrollWidget(this._ws);
+		document.getElementById("scroll-widget-toggle-btn").addEventListener("click", () => {
+			this._scrollWidget.toggle();
+		});
 
 		this._keyboardUI = new KeyboardUI(this._keyboard);
 		this._mousePanelUI = new MousePanelUI(this._mouse, this._keyboardUI);
@@ -212,6 +234,9 @@ class App {
 					this._mouse.mode = abs ? "absolute" : "relative";
 				}
 			}
+			if (ev && ev.jiggler !== undefined) {
+				this._updateJigglerUI(ev.jiggler);
+			}
 		});
 
 		this._ws.on("streamer", (ev) => {
@@ -298,6 +323,14 @@ class App {
 			}
 		});
 
+		// Settings: Mouse jiggler
+		document.getElementById("setting-jiggler-toggle").addEventListener("click", () => {
+			let toggle = document.getElementById("setting-jiggler-toggle");
+			if (toggle.disabled) return;
+			let newState = !toggle.classList.contains("on");
+			apiPost("hid/set_params", {jiggler: newState}).catch(() => {});
+		});
+
 		// Settings: Mouse sensitivity
 		let settingSensitivity = document.getElementById("setting-mouse-sensitivity");
 		let sensitivityValue = document.getElementById("setting-mouse-sensitivity-value");
@@ -312,7 +345,7 @@ class App {
 			this._mouse.sensitivity = val;
 		});
 
-		// Settings: Scroll sensitivity
+		// Settings: Scroll sensitivity (two-finger scroll only — widget uses presets)
 		let settingScrollSensitivity = document.getElementById("setting-scroll-sensitivity");
 		let scrollSensitivityValue = document.getElementById("setting-scroll-sensitivity-value");
 		let savedScrollSensitivity = localStorage.getItem("pikvm.tablet.scrollSensitivity") || "2";
@@ -324,6 +357,13 @@ class App {
 			scrollSensitivityValue.textContent = val;
 			localStorage.setItem("pikvm.tablet.scrollSensitivity", val);
 			this._mouse.scrollSensitivity = val;
+		});
+
+		// Settings: Scroll widget preset (jog shuttle sensitivity)
+		let settingScrollPreset = document.getElementById("setting-scroll-preset");
+		settingScrollPreset.value = this._scrollWidget.preset;
+		settingScrollPreset.addEventListener("change", () => {
+			this._scrollWidget.preset = settingScrollPreset.value;
 		});
 
 		// Apply saved mouse mode
