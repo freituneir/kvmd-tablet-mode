@@ -16,78 +16,72 @@ This is an alternative web frontend for PiKVM that provides:
 
 This UI runs **alongside** the existing PiKVM web interface, not as a replacement. Access it at `https://YOUR_PIKVM_IP/tablet/`
 
-## Quick Start
+## Installation
 
 **Prerequisites:**
-- PiKVM V4 device on your network
+- PiKVM V4 device with internet access
 - SSH access (default: `root` / `root`)
-- Git installed on your local machine
 
-**Installation Summary:**
+**All commands run on the PiKVM via SSH.** Nothing needs to be installed on your local machine.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/freituneir/kvmd-tablet-mode.git
-   cd kvmd-tablet-mode
-   ```
+### 1. SSH into PiKVM and download
 
-2. **Copy files to PiKVM:**
-   ```bash
-   scp -r * root@YOUR_PIKVM_IP:/tmp/tablet
-   ```
+```bash
+ssh root@YOUR_PIKVM_IP
+rw
+curl -sL https://github.com/freituneir/kvmd-tablet-mode/archive/refs/heads/main.tar.gz | tar xz -C /tmp
+```
 
-3. **SSH into PiKVM and install:**
-   ```bash
-   ssh root@YOUR_PIKVM_IP
-   rw  # Make filesystem writable
-   cp -r /tmp/tablet /usr/share/kvmd/web/tablet
-   chown -R kvmd-nginx:kvmd-nginx /usr/share/kvmd/web/tablet
-   chmod -R 755 /usr/share/kvmd/web/tablet
-   ```
+### 2. Install to web root
 
-4. **Configure nginx:**
-   ```bash
-   nano /etc/kvmd/nginx/kvmd.ctx-server.conf
-   ```
+```bash
+cp -r /tmp/kvmd-tablet-mode-main /usr/share/kvmd/web/tablet
+chown -R kvmd-nginx:kvmd-nginx /usr/share/kvmd/web/tablet
+chmod -R 755 /usr/share/kvmd/web/tablet
+```
 
-   Add this at the end of the file:
-   ```nginx
-   location /tablet {
-       alias /usr/share/kvmd/web/tablet;
-       include /etc/kvmd/nginx/loc-nocache.conf;
-   }
-   ```
+### 3. Configure nginx
 
-   **Important:** Do NOT add `auth_request /auth/check;` — the app handles authentication directly.
+```bash
+nano /etc/kvmd/nginx/kvmd.ctx-server.conf
+```
 
-5. **Apply changes:**
-   ```bash
-   mkdir -p /var/log/nginx  # If it doesn't exist
-   nginx -t                  # Test config
-   systemctl restart kvmd-nginx
-   rm -rf /tmp/tablet
-   ro                        # Lock filesystem
-   ```
+Add this at the end of the file:
 
-6. **Access the UI:**
-   Open `https://YOUR_PIKVM_IP/tablet/` on your tablet browser
-   - Accept the self-signed SSL certificate warning
-   - Log in with your PiKVM credentials (default: `admin` / `admin`)
+```nginx
+location /tablet {
+    alias /usr/share/kvmd/web/tablet;
+    include /etc/kvmd/nginx/loc-nocache.conf;
+}
+```
+
+**Important:** Do NOT add `auth_request /auth/check;` — the app handles authentication directly.
+
+### 4. Apply and lock
+
+```bash
+mkdir -p /var/log/nginx
+nginx -t
+systemctl restart kvmd-nginx
+rm -rf /tmp/kvmd-tablet-mode-main
+ro
+```
+
+### 5. Open the UI
+
+Navigate to `https://YOUR_PIKVM_IP/tablet/` on your tablet browser.
+
+- Accept the self-signed SSL certificate warning
+- Log in with your PiKVM credentials (default: `admin` / `admin`)
 
 ## Optional: Add to Landing Page
 
-To show a "Tablet" button on the PiKVM home screen:
+Adds a "Tablet" button to the PiKVM home screen alongside KVM and Terminal. Run this on the PiKVM (after `rw`):
 
 ```bash
-# From your local machine (inside the cloned kvmd-tablet-mode directory):
-scp assets/icons/tablet.svg root@YOUR_PIKVM_IP:/tmp/tablet.svg
-
-# Then run on PiKVM:
-ssh root@YOUR_PIKVM_IP 'rw && \
-mkdir -p /usr/share/kvmd/extras/tablet && \
-mkdir -p /usr/share/kvmd/web/extras/tablet && \
-cp /tmp/tablet.svg /usr/share/kvmd/web/extras/tablet/tablet.svg && \
-cat > /usr/share/kvmd/extras/tablet/manifest.yaml << EOF
+mkdir -p /usr/share/kvmd/extras/tablet /usr/share/kvmd/web/extras/tablet
+cp /usr/share/kvmd/web/tablet/assets/icons/tablet.svg /usr/share/kvmd/web/extras/tablet/tablet.svg
+cat > /usr/share/kvmd/extras/tablet/manifest.yaml << 'EOF'
 name: Tablet
 description: Tablet-optimized KVM interface
 icon: extras/tablet/tablet.svg
@@ -95,42 +89,35 @@ path: tablet
 place: 5
 enabled: true
 EOF
-systemctl restart kvmd && \
-rm /tmp/tablet.svg && \
-ro'
+systemctl restart kvmd
 ```
 
 ## Updating
 
-To update the tablet UI with the latest changes from GitHub:
+SSH into the PiKVM and run:
 
-1. **Pull latest changes:**
-   ```bash
-   cd kvmd-tablet-mode
-   git pull
-   ```
+```bash
+rw
+rm -rf /usr/share/kvmd/web/tablet
+curl -sL https://github.com/freituneir/kvmd-tablet-mode/archive/refs/heads/main.tar.gz | tar xz -C /tmp
+cp -r /tmp/kvmd-tablet-mode-main /usr/share/kvmd/web/tablet
+chown -R kvmd-nginx:kvmd-nginx /usr/share/kvmd/web/tablet
+chmod -R 755 /usr/share/kvmd/web/tablet
+rm -rf /tmp/kvmd-tablet-mode-main
+ro
+```
 
-2. **Copy updated files to PiKVM:**
-   ```bash
-   scp -r * root@YOUR_PIKVM_IP:/tmp/tablet
-   ```
-
-3. **SSH in and apply updates:**
-   ```bash
-   ssh root@YOUR_PIKVM_IP 'rw && cp -r /tmp/tablet /usr/share/kvmd/web/tablet && chmod -R 755 /usr/share/kvmd/web/tablet && rm -rf /tmp/tablet && ro'
-   ```
-
-No need to restart nginx unless config changed.
+No need to restart nginx or reconfigure it.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| **403 Forbidden** | Run: `ssh root@YOUR_PIKVM_IP 'rw && chmod -R 755 /usr/share/kvmd/web/tablet && ro'` |
-| **500 Internal Server Error** | Remove `auth_request /auth/check;` from nginx config |
+| **403 Forbidden** | `rw && chmod -R 755 /usr/share/kvmd/web/tablet && ro` |
+| **500 Internal Server Error** | Remove `auth_request /auth/check;` from nginx config, restart nginx |
 | **404 Not Found** | Verify nginx config exists and restart: `systemctl restart kvmd-nginx` |
 | **Blank screen after login** | Open menu → Settings → Switch to "MJPEG" stream mode |
-| **nginx -t fails with log error** | Create log dir: `mkdir -p /var/log/nginx` |
+| **nginx -t fails with log error** | `mkdir -p /var/log/nginx` |
 
 ## Uninstalling
 
@@ -167,7 +154,5 @@ Requires HTTPS (self-signed cert is expected).
 This project is designed for personal use with PiKVM devices. See the [upstream PiKVM project](https://github.com/pikvm/pikvm) for licensing of the backend components.
 
 ## Support
-
-For detailed step-by-step installation instructions, see the full installation guide in the original repository.
 
 For PiKVM-specific issues, refer to the [official PiKVM documentation](https://docs.pikvm.org/).
