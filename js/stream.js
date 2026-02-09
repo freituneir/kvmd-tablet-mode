@@ -23,14 +23,39 @@ export class StreamManager {
 		this._infoInterval = null;
 		this._onStatusChange = null;
 		this._onInfoUpdate = null;
+		this._onAudioStateChange = null;
 		this._janusModule = null;
+
+		// Audio/mic state
+		this._audioEnabled = true;
+		this._micEnabled = true;
+		this._audioAvailable = false;
+		this._micAvailable = false;
 	}
 
 	set onStatusChange(cb) { this._onStatusChange = cb; }
 	set onInfoUpdate(cb) { this._onInfoUpdate = cb; }
+	set onAudioStateChange(cb) { this._onAudioStateChange = cb; }
 
 	get mode() { return this._mode; }
 	get active() { return this._active; }
+
+	get audioEnabled() { return this._audioEnabled; }
+	set audioEnabled(v) {
+		if (this._audioEnabled === v) return;
+		this._audioEnabled = v;
+		this._restartIfJanus();
+	}
+
+	get micEnabled() { return this._micEnabled; }
+	set micEnabled(v) {
+		if (this._micEnabled === v) return;
+		this._micEnabled = v;
+		this._restartIfJanus();
+	}
+
+	get audioAvailable() { return this._audioAvailable; }
+	get micAvailable() { return this._micAvailable; }
 
 	getResolution() {
 		if (this._mode === "janus") {
@@ -77,6 +102,13 @@ export class StreamManager {
 		this._stopJanus();
 		this._stopMjpeg();
 		this._setActive(false);
+	}
+
+	_restartIfJanus() {
+		if (this._mode === "janus" && !this._stopped) {
+			this._stopJanus();
+			this._connectJanus();
+		}
 	}
 
 	updateState(streamerState) {
@@ -179,10 +211,17 @@ export class StreamManager {
 					} else if (msg.result.status === "stopped") {
 						this._setActive(false);
 					} else if (msg.result.status === "features") {
-						// Send watch request
+						let f = msg.result.features || {};
+						this._audioAvailable = !!f.audio;
+						this._micAvailable = !!f.mic;
+						if (this._onAudioStateChange) {
+							this._onAudioStateChange(this._audioAvailable, this._micAvailable);
+						}
+						let audio = this._audioEnabled && this._audioAvailable;
+						let mic = audio && this._micEnabled && this._micAvailable;
 						this._janusHandle.send({message: {
 							request: "watch",
-							params: {audio: false, mic: false, cam: false},
+							params: {audio: audio, mic: mic, cam: false},
 						}});
 					}
 				} else if (msg.error_code || msg.error) {
@@ -190,9 +229,17 @@ export class StreamManager {
 				}
 
 				if (jsep) {
+					let audio = this._audioEnabled && this._audioAvailable;
+					let mic = audio && this._micEnabled && this._micAvailable;
+					let tracks = [
+						{type: "video", capture: false, recv: true, add: true},
+					];
+					if (audio) {
+						tracks.push({type: "audio", capture: mic, recv: true, add: true});
+					}
 					this._janusHandle.createAnswer({
 						jsep: jsep,
-						tracks: [{type: "video", capture: false, recv: true, add: true}],
+						tracks: tracks,
 						customizeSdp: (jsep) => {
 							jsep.sdp = jsep.sdp.replace("useinbandfec=1", "useinbandfec=1;stereo=1");
 						},
@@ -255,7 +302,10 @@ export class StreamManager {
 		this._infoInterval = setInterval(() => {
 			if (this._janusHandle) {
 				let bitrate = `${this._janusHandle.getBitrate()}`.replace("kbits/sec", "kbps");
-				this._notifyInfo("WebRTC", true, bitrate);
+				let label = "WebRTC";
+				if (this._audioEnabled && this._audioAvailable) label += " + Audio";
+				if (this._micEnabled && this._micAvailable) label += " + Mic";
+				this._notifyInfo(label, true, bitrate);
 			}
 		}, 1000);
 	}

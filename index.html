@@ -273,6 +273,17 @@
 								<option value="mjpeg">MJPEG</option>
 							</select>
 						</div>
+						<div class="setting-row" id="setting-audio-row" style="display:none">
+							<span>Audio Volume</span>
+							<div class="setting-range-row">
+								<input type="range" id="setting-audio-volume" class="form-range" min="0" max="100" step="5" value="100">
+								<span id="setting-audio-volume-value" class="setting-value">100%</span>
+							</div>
+						</div>
+						<div class="setting-row" id="setting-mic-row" style="display:none">
+							<span>Microphone</span>
+							<button id="setting-mic-toggle" class="toggle-switch on" role="switch" aria-checked="true" title="Send microphone audio to remote machine"></button>
+						</div>
 						<div class="setting-row">
 							<span>Mouse Mode</span>
 							<select id="setting-mouse-mode" class="form-select">

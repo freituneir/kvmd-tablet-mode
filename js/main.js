@@ -183,6 +183,17 @@ class App {
 		let imageEl = document.getElementById("stream-image");
 		this._stream = new StreamManager(videoEl, imageEl);
 
+		// Audio: apply saved volume (default 100%) and unmute
+		let savedVolume = localStorage.getItem("pikvm.tablet.audioVolume");
+		if (savedVolume === null) savedVolume = "100";
+		videoEl.volume = parseInt(savedVolume) / 100;
+		videoEl.muted = parseInt(savedVolume) === 0;
+
+		// Mic: apply saved preference (default on)
+		let savedMic = localStorage.getItem("pikvm.tablet.micEnabled");
+		if (savedMic === null) savedMic = "true";
+		this._stream.micEnabled = savedMic === "true";
+
 		// Wire up stream geometry for mouse coordinate mapping
 		this._mouse.getStreamGeometry = () => {
 			let res = this._stream.getResolution();
@@ -290,6 +301,12 @@ class App {
 			}
 		});
 
+		// Audio/mic feature detection — show controls when Janus reports availability
+		this._stream.onAudioStateChange = (audioAvail, micAvail) => {
+			document.getElementById("setting-audio-row").style.display = audioAvail ? "" : "none";
+			document.getElementById("setting-mic-row").style.display = micAvail ? "" : "none";
+		};
+
 		// Settings: Stream mode
 		let settingStreamMode = document.getElementById("setting-stream-mode");
 		settingStreamMode.value = localStorage.getItem("pikvm.tablet.streamMode") || "auto";
@@ -297,6 +314,31 @@ class App {
 			localStorage.setItem("pikvm.tablet.streamMode", settingStreamMode.value);
 			this._stream.stop();
 			this._stream.start(settingStreamMode.value);
+		});
+
+		// Settings: Audio volume
+		let settingAudioVolume = document.getElementById("setting-audio-volume");
+		let audioVolumeValue = document.getElementById("setting-audio-volume-value");
+		settingAudioVolume.value = savedVolume;
+		audioVolumeValue.textContent = savedVolume + "%";
+		settingAudioVolume.addEventListener("input", () => {
+			let val = parseInt(settingAudioVolume.value);
+			audioVolumeValue.textContent = val + "%";
+			localStorage.setItem("pikvm.tablet.audioVolume", String(val));
+			videoEl.volume = val / 100;
+			videoEl.muted = val === 0;
+		});
+
+		// Settings: Microphone toggle
+		let settingMicToggle = document.getElementById("setting-mic-toggle");
+		settingMicToggle.classList.toggle("on", savedMic === "true");
+		settingMicToggle.setAttribute("aria-checked", savedMic === "true" ? "true" : "false");
+		settingMicToggle.addEventListener("click", () => {
+			let newState = !settingMicToggle.classList.contains("on");
+			settingMicToggle.classList.toggle("on", newState);
+			settingMicToggle.setAttribute("aria-checked", newState ? "true" : "false");
+			localStorage.setItem("pikvm.tablet.micEnabled", newState ? "true" : "false");
+			this._stream.micEnabled = newState;
 		});
 
 		// Settings: Mouse mode
