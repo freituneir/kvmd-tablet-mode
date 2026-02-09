@@ -19,8 +19,8 @@ This UI runs **alongside** the existing PiKVM web interface, not as a replacemen
 ## Installation
 
 **Prerequisites:**
-- PiKVM V4 device with internet access
-- SSH access (default: `root` / `root`)
+- PiKVM device with internet access
+- SSH access
 
 **All commands run on the PiKVM via SSH.** Nothing needs to be installed on your local machine.
 
