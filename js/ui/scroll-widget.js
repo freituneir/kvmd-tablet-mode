@@ -23,6 +23,13 @@ const PRESETS = {
 const MAX_INTERVAL = 300;    // ms — slowest repeat rate (at first tick threshold)
 const RAMP_DURATION = 1000;  // ms — time for time-based acceleration to reach minimum
 
+// macOS host scroll boost — macOS applies aggressive acceleration that
+// makes small infrequent HID wheel events nearly invisible.  We compensate
+// by multiplying the units and sending a short burst of events per tick.
+const MAC_UNIT_MULTIPLIER = 3;  // multiply preset units
+const MAC_BURST_COUNT = 3;      // number of wheel events per tick
+const MAC_BURST_DELAY = 10;     // ms between burst events
+
 export class ScrollWidget {
 	constructor(ws) {
 		this._ws = ws;
@@ -31,6 +38,9 @@ export class ScrollWidget {
 
 		// Preset
 		this._preset = localStorage.getItem("pikvm.tablet.scrollPreset") || "normal";
+
+		// macOS host mode (boosts scroll output to overcome macOS acceleration curve)
+		this._macMode = localStorage.getItem("pikvm.tablet.macScroll") === "true";
 
 		// Touch geometry (computed on touchstart from widget bounds)
 		this._centerY = 0;
@@ -72,6 +82,12 @@ export class ScrollWidget {
 
 	// Keep setter for backwards compat — widget ignores it (presets control sensitivity)
 	set scrollSensitivity(_v) {}
+
+	get macMode() { return this._macMode; }
+	set macMode(v) {
+		this._macMode = !!v;
+		localStorage.setItem("pikvm.tablet.macScroll", this._macMode);
+	}
 
 	get visible() { return !this._widget.classList.contains("hidden"); }
 
@@ -217,9 +233,18 @@ export class ScrollWidget {
 
 	_fireTick() {
 		let preset = this._getPreset();
+		let units = this._direction * preset.units;
 
-		// Send scroll event: positive direction = finger moves down = scroll down
-		this._ws.sendMouseWheel(0, this._direction * preset.units);
+		if (this._macMode) {
+			// macOS boost: multiply units and send a rapid burst of events
+			let boosted = units * MAC_UNIT_MULTIPLIER;
+			this._ws.sendMouseWheel(0, boosted);
+			for (let i = 1; i < MAC_BURST_COUNT; i++) {
+				setTimeout(() => this._ws.sendMouseWheel(0, boosted), i * MAC_BURST_DELAY);
+			}
+		} else {
+			this._ws.sendMouseWheel(0, units);
+		}
 		this._tickCount++;
 
 		// Visual feedback: glow pulse on thumb

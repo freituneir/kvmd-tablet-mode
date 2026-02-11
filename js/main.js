@@ -408,6 +408,17 @@ class App {
 			this._scrollWidget.preset = settingScrollPreset.value;
 		});
 
+		// Settings: macOS host scroll toggle
+		let macScrollToggle = document.getElementById("setting-macos-scroll-toggle");
+		macScrollToggle.classList.toggle("on", this._scrollWidget.macMode);
+		macScrollToggle.setAttribute("aria-checked", this._scrollWidget.macMode ? "true" : "false");
+		macScrollToggle.addEventListener("click", () => {
+			let newState = !macScrollToggle.classList.contains("on");
+			macScrollToggle.classList.toggle("on", newState);
+			macScrollToggle.setAttribute("aria-checked", newState ? "true" : "false");
+			this._scrollWidget.macMode = newState;
+		});
+
 		// Apply saved mouse mode
 		this._mouse.mode = settingMouseMode.value;
 
