@@ -3,8 +3,7 @@
 // Floating mouse button panel with keyboard quick-access and collapse/expand toggle
 
 export class MousePanelUI {
-	constructor(mouseHandler, keyboardUI) {
-		this._handler = mouseHandler;
+	constructor(_mouseHandler, keyboardUI) {
 		this._keyboardUI = keyboardUI;
 		this._panel = document.getElementById("mouse-panel");
 		this._buttonsWrap = document.getElementById("mouse-panel-buttons");
@@ -17,52 +16,11 @@ export class MousePanelUI {
 			this._setCollapsed(true);
 		}
 
-		// Mouse buttons (L, M, R)
-		this._panel.querySelectorAll(".mouse-btn").forEach(btn => {
-			let button = btn.dataset.button;
-
-			btn.addEventListener("touchstart", (ev) => {
-				ev.preventDefault();
-				ev.stopPropagation();
-				btn.classList.add("active");
-				this._handler.sendButton(button, true);
-			}, {passive: false});
-
-			btn.addEventListener("touchend", (ev) => {
-				ev.preventDefault();
-				ev.stopPropagation();
-				btn.classList.remove("active");
-				this._handler.sendButton(button, false);
-			}, {passive: false});
-
-			// Also handle mouse events for when using with a pointer device
-			btn.addEventListener("mousedown", (ev) => {
-				ev.preventDefault();
-				ev.stopPropagation();
-				btn.classList.add("active");
-				this._handler.sendButton(button, true);
-			});
-
-			btn.addEventListener("mouseup", (ev) => {
-				ev.preventDefault();
-				ev.stopPropagation();
-				btn.classList.remove("active");
-				this._handler.sendButton(button, false);
-			});
-
-			btn.addEventListener("mouseleave", () => {
-				if (btn.classList.contains("active")) {
-					btn.classList.remove("active");
-					this._handler.sendButton(button, false);
-				}
-			});
-		});
-
-		// Keyboard quick-access button
+		// Keyboard quick-access button — uses invisible input (no visible textbox)
 		let kbHandler = (ev) => {
 			ev.preventDefault();
 			ev.stopPropagation();
-			this._keyboardUI.showTextInput();
+			this._keyboardUI.showQuickInput();
 		};
 		this._keyboardBtn.addEventListener("click", kbHandler);
 		this._keyboardBtn.addEventListener("touchend", kbHandler, {passive: false});

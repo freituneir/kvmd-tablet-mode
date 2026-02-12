@@ -17,6 +17,19 @@ export class KeyboardUI {
 		// Track previous textarea value for send-as-you-type
 		this._prevTextValue = "";
 
+		// Hidden input for quick-type (floating panel shortcut).
+		// It captures the mobile keyboard without showing a visible textbox.
+		this._quickInput = document.createElement("textarea");
+		this._quickInput.setAttribute("autocomplete", "off");
+		this._quickInput.setAttribute("autocorrect", "off");
+		this._quickInput.setAttribute("autocapitalize", "off");
+		this._quickInput.setAttribute("spellcheck", "false");
+		this._quickInput.style.cssText =
+			"position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;";
+		document.body.appendChild(this._quickInput);
+		this._quickPrevValue = "";
+		this._quickActive = false;
+
 		// Toggle button
 		this._toggleBtn.addEventListener("click", () => this.toggle());
 		this._closeBtn.addEventListener("click", () => this.hide());
@@ -99,6 +112,48 @@ export class KeyboardUI {
 
 		// Don't hide on blur — let the user tap elsewhere and come back
 		// Instead, provide a close button (the X) or Escape to dismiss
+
+		// ── Quick-type hidden input listeners ──
+		this._quickInput.addEventListener("input", () => {
+			if (!this._quickActive) return;
+			let current = this._quickInput.value;
+			let prev = this._quickPrevValue;
+			if (current.length > prev.length) {
+				this._handler.sendText(current.slice(prev.length));
+			} else if (current.length < prev.length) {
+				let n = prev.length - current.length;
+				for (let i = 0; i < n; i++) {
+					this._handler.sendKey("Backspace", true);
+					setTimeout(() => this._handler.sendKey("Backspace", false), 30 + i * 20);
+				}
+			}
+			this._quickPrevValue = current;
+		});
+
+		this._quickInput.addEventListener("keydown", (ev) => {
+			if (!this._quickActive) return;
+			if (ev.key === "Enter") {
+				ev.preventDefault();
+				this._handler.sendKey("Enter", true);
+				setTimeout(() => this._handler.sendKey("Enter", false), 50);
+			}
+			if (ev.key === "Backspace" && this._quickInput.value.length === 0) {
+				ev.preventDefault();
+				this._handler.sendKey("Backspace", true);
+				setTimeout(() => this._handler.sendKey("Backspace", false), 50);
+			}
+			if (ev.key === "Escape") {
+				this.hideQuickInput();
+			}
+		});
+
+		this._quickInput.addEventListener("blur", () => {
+			if (this._quickActive) {
+				this._quickActive = false;
+				this._quickInput.value = "";
+				this._quickPrevValue = "";
+			}
+		});
 	}
 
 	set onVisibilityChange(cb) { this._onVisibilityChange = cb; }
@@ -150,6 +205,20 @@ export class KeyboardUI {
 		this._textInputArea.value = "";
 		this._prevTextValue = "";
 		this._textInputArea.blur();
+	}
+
+	showQuickInput() {
+		this._quickPrevValue = "";
+		this._quickInput.value = "";
+		this._quickActive = true;
+		this._quickInput.focus();
+	}
+
+	hideQuickInput() {
+		this._quickActive = false;
+		this._quickInput.value = "";
+		this._quickPrevValue = "";
+		this._quickInput.blur();
 	}
 
 	_handleTextInput() {
